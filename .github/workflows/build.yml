@@ -1,6 +1,5 @@
 name: Build APK
 
-# Ejecutar el flujo en cada push o pull request a la rama main
 on:
   push:
     branches: [ main ]
@@ -17,29 +16,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Instalar dependencias de Buildozer
-      - name: Install Buildozer dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev automake
-          pip install --user --upgrade Cython==0.29.33 virtualenv
-          pip install --user --upgrade buildozer
-          echo 'export PATH=$PATH:~/.local/bin/' >> ~/.bashrc
-
-      # Configurar Java (necesario para Android SDK)
+      # Configurar Java
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
+      # Instalar dependencias de Buildozer
+      - name: Install Buildozer dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev automake
+          pip install --user --upgrade Cython==0.29.36 virtualenv
+          pip install --user --upgrade buildozer
+          echo 'export PATH=$PATH:~/.local/bin/' >> ~/.bashrc
+          source ~/.bashrc
+
+      # Instalar Android SDK y aceptar licencias
+      - name: Setup Android SDK
+        run: |
+          sudo apt-get install -y unzip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O commandlinetools.zip
+          unzip commandlinetools.zip -d /tmp/android-sdk
+          mkdir -p /tmp/android-sdk/cmdline-tools/latest
+          mv /tmp/android-sdk/cmdline-tools/* /tmp/android-sdk/cmdline-tools/latest/
+          export ANDROID_HOME=/tmp/android-sdk
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses
+          sdkmanager "build-tools;33.0.2" "platforms;android-31" "ndk;23.1.7779620"
+          echo "export ANDROID_HOME=/tmp/android-sdk" >> ~/.bashrc
+          echo "export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin" >> ~/.bashrc
+          source ~/.bashrc
+
       # Compilar el APK con Buildozer
       - name: Build APK
         run: |
           export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64
-          sudo update-java-alternatives --set ${JAVA_HOME}
-          export PATH=$JAVA_HOME/bin:$PATH
-          buildozer -v android debug
+          export ANDROID_HOME=/tmp/android-sdk
+          export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | buildozer -v android debug
 
       # Subir el APK como artefacto
       - name: Upload APK
